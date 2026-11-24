@@ -1,0 +1,23 @@
+[project]
+name = "conversor-pe"
+version = "0.1.0"
+description = "Revisión local de salidas de producto y exportación a Excel"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "fastapi>=0.121,<1",
+    "httpx>=0.28,<1",
+    "openpyxl>=3.1.5,<4",
+    "pypdf>=6.21.4,<7",
+    "python-dotenv>=1.1,<2",
+    "python-multipart>=0.0.22,<1",
+    "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.4,<10", "ruff>=0.12,<1"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

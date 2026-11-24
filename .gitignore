@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+*.pdf
+*.xlsx
+supabase/.temp/
+supabase/.branches/
+.DS_Store

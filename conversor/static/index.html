@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PDF a Excel · Salidas de producto</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <section id="loading-view" class="loading-screen" aria-label="Cargando aplicación">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <p role="status">Verificando sesión…</p>
+    </section>
+
+    <main id="auth-view" class="auth-view" hidden>
+      <div class="auth-card">
+        <div class="auth-brand">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div>
+              <strong>PDF a Excel</strong>
+              <span>Salidas de producto</span>
+            </div>
+          </div>
+        </div>
+        <div class="auth-body">
+          <h1 id="auth-title">Iniciar sesión</h1>
+          <p id="auth-description" class="muted">Acceda con su correo y contraseña.</p>
+          <p id="auth-message" class="notice" role="status" aria-live="polite" hidden></p>
+
+          <form id="login-form" class="stack" method="post">
+            <label class="field" for="login-email">
+              Correo electrónico
+              <input id="login-email" name="email" type="email" autocomplete="username" required>
+            </label>
+            <label class="field" for="login-password">
+              Contraseña
+              <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+            </label>
+            <button class="button primary" type="submit">Iniciar sesión</button>
+            <button class="text-button" data-auth-view="recover" type="button">Recuperar acceso</button>
+          </form>
+
+          <form id="recover-form" class="stack" method="post" hidden>
+            <label class="field" for="recover-email">
+              Correo electrónico
+              <input id="recover-email" name="email" type="email" autocomplete="username" required>
+            </label>
+            <button class="button primary" type="submit">Enviar enlace de recuperación</button>
+            <button class="text-button" data-auth-view="login" type="button">Volver al inicio de sesión</button>
+          </form>
+
+          <form id="password-form" class="stack" method="post" hidden>
+            <label class="field" for="new-password">
+              Nueva contraseña
+              <input id="new-password" name="password" type="password" autocomplete="new-password" required>
+            </label>
+            <label class="field" for="confirm-password">
+              Confirmar contraseña
+              <input id="confirm-password" name="password_confirmation" type="password" autocomplete="new-password" required>
+            </label>
+            <button class="button primary" type="submit">Guardar contraseña</button>
+            <button class="text-button" data-auth-view="login" type="button">Volver al inicio de sesión</button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <div id="app-view" class="app-layout" hidden>
+      <a class="skip-link" href="#main-content">Ir al contenido</a>
+      <aside class="sidebar">
+        <div class="brand sidebar-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <strong>PDF a Excel</strong>
+            <span>Salidas de producto</span>
+          </div>
+        </div>
+        <nav class="main-nav" aria-label="Navegación principal">
+          <button type="button" data-view="dashboard" aria-controls="dashboard-view" aria-current="page">
+            <span class="nav-icon icon-dashboard" aria-hidden="true"></span>
+            Dashboard
+          </button>
+          <button type="button" data-view="history" aria-controls="history-view">
+            <span class="nav-icon icon-history" aria-hidden="true"></span>
+            Historial
+          </button>
+          <button id="nav-users" type="button" data-view="users" aria-controls="users-view" hidden>
+            <span class="nav-icon icon-users" aria-hidden="true"></span>
+            Usuarios
+          </button>
+          <button id="nav-audit" type="button" data-view="audit" aria-controls="audit-view" hidden>
+            <span class="nav-icon icon-audit" aria-hidden="true"></span>
+            Auditoría
+          </button>
+        </nav>
+        <div class="session-panel">
+          <div class="session-identity">
+            <strong id="session-name"></strong>
+            <span id="session-role"></span>
+          </div>
+          <button id="logout-button" class="session-logout" type="button">Cerrar sesión</button>
+        </div>
+      </aside>
+
+      <main id="main-content" class="workspace" tabindex="-1">
+        <p id="global-status" class="notice" role="status" aria-live="polite" hidden></p>
+        <section id="dashboard-view" aria-labelledby="dashboard-title">
+          <header class="page-header">
+            <h1 id="dashboard-title">Convertir salida a Excel</h1>
+            <p>Cargue un PDF para revisar sus datos y generar el archivo Excel.</p>
+          </header>
+
+          <section id="upload-section" class="card upload-card" aria-labelledby="upload-title">
+            <div class="section-header">
+              <h2 id="upload-title">Cargar documento</h2>
+            </div>
+            <form id="upload-form" method="post" enctype="multipart/form-data">
+              <div id="drop-zone" class="drop-zone">
+                <span class="upload-icon" aria-hidden="true"><span></span></span>
+                <p id="file-instructions"><strong>Arrastre un PDF hasta aquí</strong></p>
+                <input class="visually-hidden" id="file-input" name="file" type="file" accept="application/pdf,.pdf" aria-label="Documento PDF" aria-describedby="file-instructions" tabindex="-1">
+                <button id="pick-file" class="button secondary" type="button">Seleccionar PDF</button>
+              </div>
+
+              <div id="file-details" class="file-details" hidden>
+                <span class="file-type" aria-hidden="true">PDF</span>
+                <div class="file-meta">
+                  <strong id="file-name"></strong>
+                  <span id="file-size" class="muted"></span>
+                </div>
+              </div>
+              <div class="upload-actions">
+                <button id="upload-button" class="button primary" type="submit" disabled>Analizar documento</button>
+              </div>
+              <progress id="upload-progress" aria-label="Progreso del documento" max="100" hidden></progress>
+              <p id="upload-status" class="notice" role="status" aria-live="polite" hidden></p>
+            </form>
+          </section>
+
+          <section id="review-section" class="review-section" aria-labelledby="review-title" hidden>
+            <header class="section-header review-header">
+              <h2 id="review-title">Revisar y generar Excel</h2>
+            </header>
+            <section id="source-card" class="card source-card" aria-labelledby="source-title" hidden>
+              <header class="section-header">
+                <h3 id="source-title">Documento original</h3>
+                <a id="source-open" class="button secondary small" target="_blank" rel="noopener noreferrer">Abrir PDF</a>
+              </header>
+              <iframe id="source-frame" class="source-frame" title="Vista previa del PDF original" loading="lazy" referrerpolicy="no-referrer"></iframe>
+            </section>
+            <div id="review-content"></div>
+          </section>
+        </section>
+
+        <section id="history-view" aria-labelledby="history-title" hidden>
+          <header class="page-header page-header-actions">
+            <div>
+              <h1 id="history-title">Historial de operaciones</h1>
+              <p>Consulte los documentos procesados y las exportaciones.</p>
+            </div>
+            <button id="history-refresh" class="button secondary" type="button">Actualizar</button>
+          </header>
+          <div id="history-content"></div>
+        </section>
+
+        <section id="users-view" aria-labelledby="users-title" hidden>
+          <header class="page-header page-header-actions">
+            <div>
+              <h1 id="users-title">Administración de usuarios</h1>
+              <p>Gestione el acceso y los roles de la aplicación.</p>
+            </div>
+            <button id="users-refresh" class="button secondary" type="button">Actualizar</button>
+          </header>
+          <div id="users-content"></div>
+        </section>
+
+        <section id="audit-view" aria-labelledby="audit-title" hidden>
+          <header class="page-header page-header-actions">
+            <div>
+              <h1 id="audit-title">Auditoría</h1>
+              <p>Consulte las acciones registradas de procesamiento y administración.</p>
+            </div>
+            <button id="audit-refresh" class="button secondary" type="button">Actualizar</button>
+          </header>
+          <div id="audit-content"></div>
+        </section>
+      </main>
+    </div>
+
+    <noscript>Active JavaScript para ingresar y procesar documentos.</noscript>
+  </body>
+</html>
