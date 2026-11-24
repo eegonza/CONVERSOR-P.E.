@@ -2,11 +2,13 @@
 
 ## Controles de acceso y datos
 
-Usa el servidor HTTP en la interfaz local `127.0.0.1`. Para el acceso por red, configura un origen HTTPS y un proxy inverso con TLS. El origen configurado debe coincidir con el que abre el usuario. El servidor conserva la sesión temporal en memoria y el navegador guarda un identificador opaco en una cookie `HttpOnly` con `SameSite`. Las operaciones autenticadas de escritura exigen un token CSRF. El servidor aplica límites a los intentos de autenticación y a las cargas.
+En GitHub Pages, la interfaz abre por HTTPS y llama a Supabase desde el origen permitido de la aplicación. La sesión se mantiene en la memoria de la pestaña. La función valida el token con Supabase Auth, comprueba el perfil activo y usa una credencial privilegiada disponible dentro de Supabase para las operaciones autorizadas. [Guía de publicación](publicacion-web.md)
+
+Con el servidor local, usa la interfaz `127.0.0.1`. Para el acceso por red, configura un origen HTTPS y un proxy inverso con TLS. El origen configurado debe coincidir con el que abre el usuario. El servidor conserva la sesión temporal en memoria y el navegador guarda un identificador opaco en una cookie `HttpOnly` con `SameSite`. Las operaciones autenticadas de escritura exigen un token CSRF. El servidor aplica límites a los intentos de autenticación y a las cargas.
 
 Mantén las claves confidenciales de Supabase en el servidor, mediante `.env` con acceso limitado a quien ejecuta la aplicación. Mantén deshabilitado el registro público. Las consultas usan el token de la persona autenticada. Las políticas de Postgres limitan los datos según el rol, el perfil activo y la propiedad del registro. El servidor verifica la identidad antes de realizar las escrituras de procesamiento y auditoría con su credencial privilegiada. Las funciones de escritura vuelven a verificar los permisos del actor. Los eventos de auditoría son de solo inserción para el flujo normal de la aplicación.
 
-Los PDF se procesan localmente en un subproceso con límites de tamaño, número de páginas y tiempo. Los límites de recursos del proceso dependen del sistema operativo. Los valores de PDF se muestran como texto y los campos de texto de Excel se escriben como celdas literales. Conserva actualizados el analizador PDF, el servidor y el navegador.
+Los PDF se procesan con límites de tamaño, número de páginas y tiempo. En GitHub Pages el procesamiento ocurre en un Web Worker. Con FastAPI se ejecuta en un subproceso cuyos límites de recursos dependen del sistema operativo. Los valores de PDF se muestran como texto y los campos de texto de Excel se escriben como celdas literales. Conserva actualizados el analizador PDF, el servidor y el navegador.
 
 ## Conservación
 
