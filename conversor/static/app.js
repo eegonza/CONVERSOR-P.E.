@@ -1,6 +1,7 @@
 "use strict";
 
 const byId = (id) => document.getElementById(id);
+const hosted = globalThis.conversorHosted;
 const views = ["dashboard", "history", "users", "audit"];
 const decimalFields = new Set([
   "units", "cost", "sale_price", "tax_rate", "outbound_total", "inbound_units", "inbound_total",
@@ -119,22 +120,24 @@ function labelFor(key) {
 
 async function request(path, { method = "GET", body, esArchivo = false, auth = true } = {}) {
   const session = state.session;
-  const headers = { Accept: esArchivo ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (auth && session?.csrf && method !== "GET") headers["X-CSRF-Token"] = session.csrf;
-  const response = await fetch(path, {
-    method, headers, credentials: "same-origin", cache: "no-store",
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const failure = new RequestError(response.status, await response.json().catch(() => null));
+  try {
+    if (hosted) return await hosted.request(path, { method, body });
+    const headers = { Accept: esArchivo ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/json" };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (auth && session?.csrf && method !== "GET") headers["X-CSRF-Token"] = session.csrf;
+    const response = await fetch(path, {
+      method, headers, credentials: "same-origin", cache: "no-store",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) throw new RequestError(response.status, await response.json().catch(() => null));
+    if (esArchivo) return response.blob();
+    return response.status === 204 ? null : response.json();
+  } catch (failure) {
     if (auth && failure.status === 401 && session && state.session === session) {
       endSession("La sesión ha vencido. Inicie sesión nuevamente.");
     }
     throw failure;
   }
-  if (esArchivo) return response.blob();
-  return response.status === 204 ? null : response.json();
 }
 
 function showAuth(mode, message = "", kind = "") {
@@ -294,6 +297,23 @@ function setUploadProgress(show, value) {
 }
 
 function uploadFile(file) {
+  if (hosted) {
+    const controller = new AbortController();
+    state.upload = controller;
+    return hosted.upload(file, {
+      signal: controller.signal,
+      onStage: (stage) => {
+        if (controller.signal.aborted) return;
+        const messages = {
+          loading: "Preparando el lector de PDF…",
+          reading: "Leyendo el PDF en este navegador…",
+          saving: "Guardando los datos extraídos en Supabase…",
+        };
+        if (messages[stage]) notice(byId("upload-status"), messages[stage]);
+        setUploadProgress(true, stage === "saving" ? 90 : undefined);
+      },
+    });
+  }
   const form = new FormData();
   form.append("file", file);
   return new Promise((resolve, reject) => {
@@ -1081,7 +1101,7 @@ byId("upload-form").addEventListener("submit", async (event) => {
   const { session, file } = state;
   state.uploadBusy = true;
   for (const id of ["file-input", "pick-file", "upload-button"]) byId(id).disabled = true;
-  notice(byId("upload-status"), "Cargando el PDF…");
+  notice(byId("upload-status"), hosted ? "Leyendo el PDF en este navegador…" : "Cargando el PDF…");
   setUploadProgress(true, 0);
   try {
     const record = await uploadFile(file);

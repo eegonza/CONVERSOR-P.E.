@@ -1,14 +1,20 @@
 # Conversor PDF a Excel
 
-Aplicación web local para revisar salidas de producto de City Mall, S.A. y exportarlas a Excel. La aplicación conserva el origen por página y renglón, las apariciones repetidas y los campos vacíos. El operador revisa los datos, confirma el número de salida y decide qué filas y columnas se exportarán.
+Aplicación web para revisar salidas de producto de City Mall, S.A. y exportarlas a Excel. La aplicación conserva el origen por página y renglón, las apariciones repetidas y los campos vacíos. El operador revisa los datos, confirma el número de salida y decide qué filas y columnas se exportarán.
 
-## Requisitos
+## Publicación con GitHub Pages
+
+GitHub Pages sirve la interfaz y Supabase gestiona la autenticación, los perfiles, las conversiones y la auditoría. El navegador lee el PDF y genera el archivo Excel. Sigue la [guía para publicar en GitHub Pages y Supabase](docs/publicacion-web.md).
+
+## Versión con servidor local
+
+### Requisitos
 
 - Python 3.12 y [uv](https://docs.astral.sh/uv/getting-started/installation/).
 - Un proyecto de Supabase que administres con su base de datos Postgres.
 - Un navegador actual. La interfaz y la extracción se ejecutan en el equipo local. Supabase recibe las solicitudes de autenticación y conserva los datos extraídos y el historial de auditoría.
 
-## Instalación local
+### Instalación local
 
 1. Clona este repositorio e instala las dependencias.
 

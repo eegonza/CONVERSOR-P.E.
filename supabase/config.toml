@@ -24,3 +24,8 @@ enable_anonymous_sign_ins = false
 
 [auth.email]
 enable_signup = false
+
+[functions.conversor-api]
+# The handler validates each user token with Supabase Auth before reading data
+# or using its server credential. It also accepts browser preflight requests.
+verify_jwt = false
