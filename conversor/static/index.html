@@ -69,59 +69,70 @@
 
     <div id="app-view" class="app-layout" hidden>
       <a class="skip-link" href="#main-content">Ir al contenido</a>
-      <aside class="sidebar">
-        <div class="brand sidebar-brand">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div>
-            <strong>PDF a Excel</strong>
-            <span>Salidas de producto</span>
+      <header class="app-header">
+        <div class="shell-bar">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div>
+              <strong>PDF a Excel</strong>
+              <span>Salidas de producto</span>
+            </div>
+          </div>
+          <nav class="main-nav" aria-label="Navegación principal">
+            <button type="button" data-view="dashboard" aria-controls="dashboard-view" aria-current="page">
+              <span class="nav-icon icon-dashboard" aria-hidden="true"></span>
+              Nueva salida
+            </button>
+            <button type="button" data-view="history" aria-controls="history-view">
+              <span class="nav-icon icon-history" aria-hidden="true"></span>
+              Historial
+            </button>
+            <button id="nav-users" type="button" data-view="users" aria-controls="users-view" hidden>
+              <span class="nav-icon icon-users" aria-hidden="true"></span>
+              Usuarios
+            </button>
+            <button id="nav-audit" type="button" data-view="audit" aria-controls="audit-view" hidden>
+              <span class="nav-icon icon-audit" aria-hidden="true"></span>
+              Auditoría
+            </button>
+          </nav>
+          <div class="session-panel">
+            <div class="session-identity">
+              <strong id="session-name"></strong>
+              <span id="session-role"></span>
+            </div>
+            <button id="logout-button" class="session-logout" type="button">Cerrar sesión</button>
           </div>
         </div>
-        <nav class="main-nav" aria-label="Navegación principal">
-          <button type="button" data-view="dashboard" aria-controls="dashboard-view" aria-current="page">
-            <span class="nav-icon icon-dashboard" aria-hidden="true"></span>
-            Dashboard
-          </button>
-          <button type="button" data-view="history" aria-controls="history-view">
-            <span class="nav-icon icon-history" aria-hidden="true"></span>
-            Historial
-          </button>
-          <button id="nav-users" type="button" data-view="users" aria-controls="users-view" hidden>
-            <span class="nav-icon icon-users" aria-hidden="true"></span>
-            Usuarios
-          </button>
-          <button id="nav-audit" type="button" data-view="audit" aria-controls="audit-view" hidden>
-            <span class="nav-icon icon-audit" aria-hidden="true"></span>
-            Auditoría
-          </button>
-        </nav>
-        <div class="session-panel">
-          <div class="session-identity">
-            <strong id="session-name"></strong>
-            <span id="session-role"></span>
-          </div>
-          <button id="logout-button" class="session-logout" type="button">Cerrar sesión</button>
-        </div>
-      </aside>
+      </header>
 
       <main id="main-content" class="workspace" tabindex="-1">
         <p id="global-status" class="notice" role="status" aria-live="polite" hidden></p>
         <section id="dashboard-view" aria-labelledby="dashboard-title">
-          <header class="page-header">
-            <h1 id="dashboard-title">Convertir salida a Excel</h1>
-            <p>Cargue un PDF para revisar sus datos y generar el archivo Excel.</p>
+          <header class="page-header dashboard-header">
+            <div>
+              <h1 id="dashboard-title">Nueva salida</h1>
+              <p>Revise los datos de un PDF y elija qué exportar a Excel.</p>
+            </div>
+            <span class="privacy-status">Procesamiento local</span>
           </header>
 
-          <section id="upload-section" class="card upload-card" aria-labelledby="upload-title">
-            <div class="section-header">
-              <h2 id="upload-title">Cargar documento</h2>
-            </div>
+          <ol id="workflow-steps" class="workflow-steps" aria-label="Progreso de la conversión">
+            <li aria-current="step"><span class="step-marker" aria-hidden="true">1</span>Cargar PDF</li>
+            <li><span class="step-marker" aria-hidden="true">2</span>Revisar datos</li>
+            <li><span class="step-marker" aria-hidden="true">3</span>Descargar Excel</li>
+          </ol>
+
+          <section id="upload-section" class="card upload-card" aria-labelledby="file-instructions">
             <form id="upload-form" method="post" enctype="multipart/form-data">
               <div id="drop-zone" class="drop-zone">
                 <span class="upload-icon" aria-hidden="true"><span></span></span>
-                <p id="file-instructions"><strong>Arrastre un PDF hasta aquí</strong></p>
-                <input class="visually-hidden" id="file-input" name="file" type="file" accept="application/pdf,.pdf" aria-label="Documento PDF" aria-describedby="file-instructions" tabindex="-1">
-                <button id="pick-file" class="button secondary" type="button">Seleccionar PDF</button>
+                <div>
+                  <h2 id="file-instructions">Arrastre su PDF aquí</h2>
+                  <p id="file-hint">Elija un documento con texto seleccionable.</p>
+                </div>
+                <input class="visually-hidden" id="file-input" name="file" type="file" accept="application/pdf,.pdf" aria-label="Documento PDF" aria-describedby="file-hint" tabindex="-1">
+                <button id="pick-file" class="button primary" type="button">Seleccionar PDF</button>
               </div>
 
               <div id="file-details" class="file-details" hidden>
@@ -130,26 +141,21 @@
                   <strong id="file-name"></strong>
                   <span id="file-size" class="muted"></span>
                 </div>
-              </div>
-              <div class="upload-actions">
-                <button id="upload-button" class="button primary" type="submit" disabled>Analizar documento</button>
+                <button id="upload-button" class="button primary" type="submit" disabled hidden>Analizar documento</button>
               </div>
               <progress id="upload-progress" aria-label="Progreso del documento" max="100" hidden></progress>
               <p id="upload-status" class="notice" role="status" aria-live="polite" hidden></p>
             </form>
+            <details id="source-card" class="source-card" hidden>
+              <summary>Documento original</summary>
+              <div class="source-content stack">
+                <a id="source-open" class="button secondary small" target="_blank" rel="noopener noreferrer">Abrir PDF</a>
+                <iframe id="source-frame" class="source-frame" title="Vista previa del PDF original" loading="lazy" referrerpolicy="no-referrer"></iframe>
+              </div>
+            </details>
           </section>
 
-          <section id="review-section" class="review-section" aria-labelledby="review-title" hidden>
-            <header class="section-header review-header">
-              <h2 id="review-title">Revisar y generar Excel</h2>
-            </header>
-            <section id="source-card" class="card source-card" aria-labelledby="source-title" hidden>
-              <header class="section-header">
-                <h3 id="source-title">Documento original</h3>
-                <a id="source-open" class="button secondary small" target="_blank" rel="noopener noreferrer">Abrir PDF</a>
-              </header>
-              <iframe id="source-frame" class="source-frame" title="Vista previa del PDF original" loading="lazy" referrerpolicy="no-referrer"></iframe>
-            </section>
+          <section id="review-section" class="review-section" aria-label="Revisión de la salida" hidden>
             <div id="review-content"></div>
           </section>
         </section>

@@ -225,6 +225,7 @@ function endSession(message = "") {
   clearSource();
   byId("upload-form").reset();
   setFile(null);
+  updateWorkflow();
   setUploadProgress(false);
   notice(byId("upload-status"));
   byId("review-section").hidden = true;
@@ -248,7 +249,6 @@ function openView(view) {
   for (const item of document.querySelectorAll("[data-view]")) {
     if (item.dataset.view === view) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
-    item.classList.toggle("active", item.dataset.view === view);
   }
   notice(byId("global-status"));
   if (view !== "dashboard") refreshView(view);
@@ -257,6 +257,7 @@ function openView(view) {
 function clearSource() {
   if (state.source) URL.revokeObjectURL(state.source.url);
   state.source = null;
+  byId("source-card").open = false;
   byId("source-card").hidden = true;
   byId("source-frame").removeAttribute("src");
   byId("source-open").removeAttribute("href");
@@ -279,11 +280,34 @@ function setFile(file) {
     return;
   }
   state.file = file;
-  byId("file-details").hidden = !file;
+  const { record } = state;
+  byId("file-details").hidden = !file && !record;
+  byId("upload-button").hidden = !file;
   byId("upload-button").disabled = state.uploadBusy || !file;
-  byId("file-name").textContent = file?.name ?? "";
-  byId("file-size").textContent = file ? new Intl.NumberFormat("es-PA").format(file.size) + " bytes" : "";
+  byId("file-name").textContent = file?.name ?? record?.filename ?? "";
+  let details = "";
+  if (file) details = `${new Intl.NumberFormat("es-PA").format(file.size)} bytes · Listo para analizar`;
+  else if (record) {
+    const { documents, page_count: pages } = record.extraction;
+    const rows = documents.reduce((total, item) => total + item.rows.length, 0);
+    details = `${pages} ${pages === 1 ? "página" : "páginas"} · ${rows} ${rows === 1 ? "fila detectada" : "filas detectadas"}`;
+  }
+  byId("file-size").textContent = details;
+  byId("pick-file").textContent = record ? "Seleccionar otro PDF" : "Seleccionar PDF";
   notice(byId("upload-status"));
+}
+
+function updateWorkflow() {
+  let current = state.record ? 2 : 1;
+  if (state.preview && !state.preview.preview.issues?.some((issue) => issue.severity === "error")) current = 3;
+  if (state.review?.exported) current = 4;
+  for (const [index, step] of Array.from(byId("workflow-steps").children).entries()) {
+    const complete = index + 1 < current;
+    step.classList.toggle("is-complete", complete);
+    step.firstElementChild.textContent = complete ? "✓" : String(index + 1);
+    if (index + 1 === current) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  }
 }
 
 function setUploadProgress(show, value) {
@@ -351,12 +375,15 @@ function selectDocument(doc) {
   state.preview = null;
   state.previewRevision += 1;
   renderReview();
+  updateWorkflow();
 }
 
 function loadRecord(record, file = null) {
   if (file) showSource(file, record.id);
   else if (state.source?.id !== record.id) clearSource();
   state.record = record;
+  byId("file-input").value = "";
+  setFile(null);
   const documents = record.extraction.documents;
   selectDocument(documents.length === 1 ? documents[0] : null);
   byId("review-section").hidden = false;
@@ -369,9 +396,13 @@ function issueDetails(issues, title) {
   const warnings = issues.filter((item) => item.severity === "warning").length;
   container.classList.toggle("error", errors > 0);
   container.classList.toggle("warning", errors === 0 && warnings > 0);
-  container.open = errors > 0 || warnings > 0;
-  container.append(element("summary", `${title} (${issues.length})`));
-  const list = element("ul");
+  container.open = errors > 0;
+  const count = warnings && !errors
+    ? `${warnings} ${warnings === 1 ? "advertencia" : "advertencias"}`
+    : String(issues.length);
+  container.append(element("summary", `${title} (${count})`));
+  const list = element("ul", null, "issue-list");
+  list.tabIndex = 0;
   for (const item of issues) {
     const location = [item.page == null ? "" : `página ${item.page}`, item.row == null ? "" : `fila ${item.row}`]
       .filter(Boolean).join(", ");
@@ -396,16 +427,23 @@ function invalidatePreview() {
   state.preview = null;
   state.previewRevision += 1;
   if (hadPreview) {
-    state.review.preview.replaceChildren();
-    notice(state.review.previewStatus, "La selección cambió. Genere una vista previa actualizada.", "warning");
+    state.review.validation.replaceChildren();
+    notice(state.review.previewStatus, "La selección cambió. Vuelva a calcular los totales.", "warning");
   }
   state.review.previewPending = false;
+  state.review.exported = false;
+  renderDraftPreview();
   updatePreviewControl();
+  updateWorkflow();
 }
 
 function updatePreviewControl() {
-  state.review.previewButton.disabled = !state.doc?.number || !state.columns.length ||
-    state.editing !== null || state.review.previewPending;
+  const control = state.review.previewButton;
+  control.disabled = !state.doc?.number || !state.columns.length ||
+    state.doc.rows.length === state.exclude.size || state.editing !== null || state.review.previewPending;
+  control.textContent = state.preview ? "Recalcular totales" : "Calcular totales";
+  control.classList.toggle("primary", !state.preview);
+  control.classList.toggle("secondary", Boolean(state.preview));
 }
 
 function valueFor(row, key) {
@@ -527,12 +565,14 @@ function renderColumnOptions(focusKey) {
   const options = state.review.columnOptions;
   const selected = state.columns;
   const all = Object.keys(state.session.columns);
+  state.review.columnCount.textContent = `${selected.length} de ${all.length} seleccionadas`;
   options.replaceChildren();
   for (const key of [...selected, ...all.filter((column) => !selected.includes(column))]) {
     const option = element("div", null, "column-option");
     const index = selected.indexOf(key);
     const control = input("checkbox", key);
     control.checked = index !== -1;
+    option.classList.toggle("is-selected", control.checked);
     control.addEventListener("change", () => {
       if (control.checked) selected.push(key);
       else selected.splice(index, 1);
@@ -541,19 +581,22 @@ function renderColumnOptions(focusKey) {
     });
     const label = element("label", null, "checkbox-label");
     label.append(control, element("span", labelFor(key)));
-    const reorder = element("div", null, "actions-inline");
-    for (const [delta, symbol, action] of [[-1, "↑", "Subir"], [1, "↓", "Bajar"]]) {
-      const adjacent = index + delta;
-      const move = button(symbol, () => {
-        [selected[index], selected[adjacent]] = [selected[adjacent], selected[index]];
-        invalidatePreview();
-        renderColumnOptions(key);
-      }, "button secondary small");
-      move.disabled = index === -1 || adjacent < 0 || adjacent >= selected.length;
-      move.setAttribute("aria-label", `${action} ${labelFor(key)}`);
-      reorder.append(move);
+    option.append(label);
+    if (index !== -1 && selected.length > 1) {
+      const reorder = element("div", null, "reorder-controls");
+      for (const [delta, symbol, action] of [[-1, "↑", "Subir"], [1, "↓", "Bajar"]]) {
+        const adjacent = index + delta;
+        const move = button(symbol, () => {
+          [selected[index], selected[adjacent]] = [selected[adjacent], selected[index]];
+          invalidatePreview();
+          renderColumnOptions(key);
+        }, "reorder-button");
+        move.disabled = adjacent < 0 || adjacent >= selected.length;
+        move.setAttribute("aria-label", `${action} ${labelFor(key)}`);
+        reorder.append(move);
+      }
+      option.append(reorder);
     }
-    option.append(label, reorder);
     options.append(option);
     if (focusKey === key) control.focus();
   }
@@ -564,8 +607,6 @@ function renderReview() {
   area.replaceChildren();
   const { record, doc } = state;
   const extraction = record.extraction;
-  const header = card("Revisión de la extracción");
-  header.append(element("p", `${record.filename} · ${extraction.page_count} páginas en el PDF`, "muted"));
   if (extraction.documents.length > 1) {
     const picker = select("Número de salida", [
       ["", "Seleccione una salida"],
@@ -573,36 +614,52 @@ function renderReview() {
     ]);
     picker.value = doc ? String(extraction.documents.indexOf(doc)) : "";
     picker.addEventListener("change", () => selectDocument(picker.value === "" ? null : extraction.documents[Number(picker.value)]));
-    header.append(field("El PDF contiene varias salidas. Elija una para validarla por separado.", picker));
+    const panel = element("div", null, "card document-picker");
+    panel.append(field("Salida del PDF", picker));
+    area.append(panel);
   }
   const general = issueDetails(extraction.issues, "Hallazgos del PDF");
-  if (general) header.append(general);
-  area.append(header);
+  if (general) area.append(general);
   if (!doc) {
     state.review = null;
     if (!extraction.documents.length) area.append(element("p", "No se identificó una salida en este PDF.", "notice error"));
     return;
   }
-  header.append(element("p", `Salida ${doc.number || "sin identificar"} · ${doc.rows.length} filas detectadas`));
+  const previewPanel = element("section", null, "card stack preview-panel");
+  const previewHeader = element("header", null, "section-header preview-header");
+  const title = element("div");
+  title.append(element("h2", "Vista previa"), element("p", `Salida ${doc.number || "sin identificar"}`, "muted"));
+  const previewCount = element("span", null, "badge row-badge");
+  previewCount.setAttribute("aria-live", "polite");
+  previewHeader.append(title, previewCount);
+  const previewTable = element("div", null, "excel-preview stack");
+  previewPanel.append(previewHeader, previewTable);
+
+  const docProblems = issueDetails(doc.issues, "Hallazgos de la salida");
+  if (docProblems) previewPanel.append(docProblems);
+  if (!doc.number) previewPanel.append(element("p", "Se necesita un número de salida identificado para generar el Excel.", "notice error"));
+
   const headerValues = [
     ["Empresa", doc.header?.company], ["Fecha de salida", doc.header?.date],
     ["Fecha superior", doc.header?.printed_date], ["Referencia", doc.header?.reference],
     ["Destino", doc.header?.destination], ["Nota del PDF", doc.header?.note],
   ].filter(([, value]) => value != null && value !== "");
   if (headerValues.length) {
-    const metadata = element("dl", null, "stats-grid");
+    const documentDetails = element("details", null, "review-fold");
+    documentDetails.append(element("summary", "Datos del documento"));
+    const metadata = element("dl", null, "document-meta");
     for (const [label, value] of headerValues) {
       const stat = element("div", null, "stat");
       stat.append(element("dt", label), element("dd", value));
       metadata.append(stat);
     }
-    header.append(metadata);
+    documentDetails.append(metadata);
+    previewPanel.append(documentDetails);
   }
-  const docProblems = issueDetails(doc.issues, "Hallazgos de la salida");
-  if (docProblems) header.append(docProblems);
-  if (!doc.number) header.append(element("p", "Se necesita un número de salida identificado para generar el Excel.", "notice error"));
 
-  const rowsCard = card("Filas detectadas");
+  const rowsCard = element("details", null, "review-fold");
+  rowsCard.append(element("summary", "Seleccionar y corregir filas"));
+  const rowsEditor = element("div", null, "stack");
   const filters = element("div", null, "toolbar");
   const search = input("search", "search", state.search);
   search.placeholder = "Código, descripción o referencia";
@@ -643,21 +700,70 @@ function renderReview() {
     headings[index].replaceChildren(sort);
   });
   const editor = element("div");
-  rowsCard.append(filters, rowActions, count, editor, grid.wrap);
+  rowsEditor.append(filters, rowActions, count, editor, grid.wrap);
+  rowsCard.append(rowsEditor);
 
-  const columnCard = card("Columnas del Excel");
+  const columnCard = element("section", null, "card stack column-panel");
+  const columnHeader = element("header");
+  const columnCount = element("p", null, "muted");
+  columnCount.setAttribute("aria-live", "polite");
+  columnHeader.append(element("h2", "Columnas del Excel"), columnCount);
   const columnOptions = element("div", null, "column-options");
-  const previewButton = button("Actualizar vista previa", createPreview, "button primary");
+  columnCard.append(columnHeader, columnOptions);
+  const previewButton = button("Calcular totales", createPreview, "button primary");
   const previewStatus = element("p", null, "notice");
   previewStatus.setAttribute("role", "status");
   previewStatus.hidden = true;
-  columnCard.append(columnOptions, previewButton, previewStatus);
-  const preview = element("div");
-  state.review = { sourceRows: grid.body, count, editor, columnOptions, previewButton, previewStatus, preview, previewPending: false };
-  area.append(rowsCard, columnCard, preview);
+  const calculation = element("div", null, "preview-actions");
+  calculation.append(previewButton);
+  const validation = element("div", null, "stack preview-validation");
+  previewPanel.append(rowsCard, calculation, previewStatus, validation);
+  state.review = {
+    sourceRows: grid.body, count, editor, columnOptions, columnCount,
+    previewTable, previewCount, previewButton, previewStatus, validation, previewPending: false, exported: false,
+  };
+  const layout = element("div", null, "review-layout");
+  layout.append(columnCard, previewPanel);
+  area.append(layout);
   renderSourceRows();
   renderColumnOptions();
+  renderDraftPreview();
   updatePreviewControl();
+}
+
+function renderDraftPreview() {
+  const rows = state.doc.rows.filter((row) => !state.exclude.has(row.id));
+  renderPreviewTable(state.columns, rows, true);
+}
+
+function renderPreviewTable(columns, rows, draft = false) {
+  const { previewTable, previewCount } = state.review;
+  previewCount.textContent = `${rows.length} ${rows.length === 1 ? "fila" : "filas"}`;
+  if (!columns.length || !rows.length) {
+    const message = !columns.length ? "Seleccione una columna para ver la vista previa." : "Incluya al menos una fila para exportar.";
+    previewTable.replaceChildren(element("p", message, "empty-state preview-empty"));
+    return;
+  }
+  const actual = table(columns.map(labelFor), "Datos de la vista previa del Excel");
+  actual.grid.classList.add("xlsx-table");
+  const columnClasses = columns.map((key) => {
+    if (decimalFields.has(key) || key === "page" || key === "line") return "numeric-cell";
+    if (key === "description") return "description-cell";
+    if (key === "code" || key === "reference") return "code-cell";
+    return "text-cell";
+  });
+  const classCells = (row) => columnClasses.forEach((name, index) => row.cells[index].classList.add(name));
+  classCells(actual.grid.tHead.rows[0]);
+  const shown = draft ? rows.slice(0, 100) : rows;
+  for (const row of shown) {
+    const tr = actual.body.insertRow();
+    appendCells(tr, columns.map((key) => draft ? valueFor(row, key) : row[key]));
+    classCells(tr);
+  }
+  previewTable.replaceChildren(actual.wrap);
+  if (shown.length < rows.length) {
+    previewTable.append(element("p", `Vista rápida de ${shown.length} de ${rows.length} filas seleccionadas.`, "muted preview-note"));
+  }
 }
 
 async function createPreview() {
@@ -665,10 +771,13 @@ async function createPreview() {
   const revision = ++state.previewRevision;
   const recordId = state.record.id;
   state.preview = null;
-  review.preview.replaceChildren();
+  review.validation.replaceChildren();
+  review.exported = false;
   review.previewPending = true;
+  renderDraftPreview();
   updatePreviewControl();
-  notice(review.previewStatus, "Calculando la vista previa…");
+  updateWorkflow();
+  notice(review.previewStatus, "Calculando los totales…");
   try {
     const result = await request(`/api/conversions/${encodeURIComponent(recordId)}/preview`, {
       method: "POST", body: documentPayload(),
@@ -677,6 +786,7 @@ async function createPreview() {
     state.preview = result;
     notice(review.previewStatus);
     renderPreview(result);
+    updateWorkflow();
   } catch (error) {
     if (revision === state.previewRevision) notice(review.previewStatus, error.message, "error");
   } finally {
@@ -693,48 +803,52 @@ function displayBase(exact, known) {
 
 function renderPreview(result) {
   const { preview } = result;
-  const panel = card(`Vista previa de la salida ${preview.number}`, "card stack preview-panel");
   const { summary, printed_totals: printed, issues } = preview;
+  renderPreviewTable(preview.columns, preview.rows);
+  const panel = element("section", null, "stack totals-panel");
   const stats = element("div", null, "stats-grid");
   const measurements = [
-    ["Páginas de la salida", summary.page_count], ["Filas detectadas", summary.detected_rows],
-    ["Filas por exportar", summary.export_rows], ["Filas excluidas", summary.excluded_rows],
-    ["Productos distintos", summary.distinct_products], ["Total de unidades", summary.units],
+    ["Unidades", summary.units], ["Subtotal", summary.subtotal],
+    ["Impuesto", summary.tax], ["Total neto", summary.net],
   ];
   for (const [label, value] of measurements) {
     const stat = element("div", null, "stat");
     stat.append(element("span", label), element("strong", scalar(value)));
     stats.append(stat);
   }
-  const amounts = table(["Concepto", "Salidas impresas", "Entradas impresas", "Filas seleccionadas"], "Totales impresos y seleccionados");
+  const amounts = table(["Dato", "PDF · Salidas", "PDF · Entradas", "Selección"], "Comparación de los totales con el PDF");
+  amounts.grid.classList.add("totals-table");
   for (const [label, key, current] of [
     ["Subtotal", "subtotal", summary.subtotal],
     ["Base gravada", "taxable_subtotal", displayBase(summary.taxable_subtotal, summary.known_taxable_subtotal)],
     ["Base exenta", "exempt_subtotal", displayBase(summary.exempt_subtotal, summary.known_exempt_subtotal)],
     ["Impuesto", "tax", summary.tax], ["Total neto", "net", summary.net],
   ]) appendCells(amounts.body.insertRow(), [label, scalar(printed?.outbound?.[key]), scalar(printed?.inbound?.[key]), scalar(current)]);
-  panel.append(stats, amounts.wrap);
+  const pages = `${summary.page_count} ${summary.page_count === 1 ? "página" : "páginas"}`;
+  panel.append(element("h3", "Totales calculados"), stats, element("p",
+    `${pages} · ${summary.detected_rows} filas detectadas · ${summary.excluded_rows} excluidas · ${summary.distinct_products} productos distintos`,
+    "muted totals-caption"), element("h4", "Comprobación contra el PDF"), amounts.wrap);
   const issuesBlock = issueDetails(issues, "Resultados de validación");
-  if (issuesBlock) panel.append(issuesBlock);
-
-  panel.append(element("h4", "Datos que se exportarán"));
-  const actual = table(preview.columns.map(labelFor), "Datos de la vista previa del Excel");
-  for (const row of preview.rows) appendCells(actual.body.insertRow(), preview.columns.map((key) => row[key]));
-  panel.append(actual.wrap);
+  const validation = state.review.validation;
+  validation.replaceChildren(panel);
+  if (issuesBlock) validation.append(issuesBlock);
   const hasErrors = issues?.some((item) => item.severity === "error");
   const hasWarnings = issues?.some((item) => item.severity === "warning");
-  if (hasErrors) panel.append(element("p", "Corrija los errores y actualice la vista previa para continuar.", "notice error"));
-  else panel.append(exportForm(result, hasWarnings));
-  state.review.preview.replaceChildren(panel);
+  if (hasErrors) validation.append(element("p", "Corrija los errores y vuelva a calcular los totales para continuar.", "notice error"));
+  else validation.append(exportForm(result, hasWarnings));
 }
 
 function exportForm(result, hasWarnings) {
-  const form = element("form", null, "stack");
+  const form = element("form", null, "stack export-form");
+  const filename = `SALIDA ${result.preview.number}.xlsx`;
   const number = input("text", "confirmed_number");
   number.required = true;
   number.inputMode = "numeric";
   number.autocomplete = "off";
-  form.append(field(`Escriba el número de salida ${result.preview.number} para confirmar`, number));
+  const fields = element("div", null, "field-grid export-fields");
+  fields.append(field(`Escriba ${result.preview.number} para confirmar la salida`, number),
+    field("Archivo Excel", element("output", filename, "export-filename")));
+  form.append(fields);
   const reason = element("textarea");
   reason.name = "accepted_reason";
   reason.maxLength = 1000;
@@ -743,14 +857,13 @@ function exportForm(result, hasWarnings) {
     form.append(field("Motivo para aceptar las advertencias", reason));
   }
   const actions = element("div", null, "form-actions");
-  const submit = button("Validar y generar Excel", null, "button primary");
+  const submit = button("Descargar Excel", null, "button primary");
   submit.type = "submit";
   const message = element("p", null, "notice");
   message.hidden = true;
   message.setAttribute("role", "status");
-  actions.append(button("Cancelar", () => {
-    state.preview = null;
-    state.review.preview.replaceChildren();
+  actions.append(button("Volver a revisar", () => {
+    invalidatePreview();
     notice(state.review.previewStatus, "Se canceló la validación.");
     state.review.previewButton.focus();
   }), submit);
@@ -768,7 +881,7 @@ function exportForm(result, hasWarnings) {
       return;
     }
     if (result !== state.preview || state.editing) {
-      notice(message, "Cierre la edición y actualice la vista previa antes de generar el Excel.", "error");
+      notice(message, "Cierre la edición y vuelva a calcular los totales antes de descargar el Excel.", "error");
       return;
     }
     const session = state.session;
@@ -790,12 +903,16 @@ function exportForm(result, hasWarnings) {
       const link = element("a");
       const url = URL.createObjectURL(excel);
       link.href = url;
-      link.download = `SALIDA ${result.preview.number}.xlsx`;
+      link.download = filename;
       document.body.append(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       notice(message, "Excel generado.", "success");
+      if (state.preview === result) {
+        state.review.exported = true;
+        updateWorkflow();
+      }
     } catch (error) {
       if (state.session !== session) return;
       if (error.status === 409 && state.preview === result) {
