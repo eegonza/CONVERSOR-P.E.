@@ -24,7 +24,7 @@ def _text_page(writer, parts):
     page.replace_contents(stream)
 
 
-def _form(writer, number, printed_page=1, *, style=False, footer=True, outgoing=None, incoming=False):
+def _form(writer, number, printed_page=1, *, style=False, footer=True, outgoing=None, incoming=False, extra_number=None):
     parts = [
         (27, 40, "Número:"), (114, 42, number), (492, 36, str(printed_page)),
         (84, 54, "2/01/2025"), (454, 49, "Fecha: 3/01/2025"),
@@ -38,6 +38,8 @@ def _form(writer, number, printed_page=1, *, style=False, footer=True, outgoing=
         (309, 150, "G"), (318, 150, "7.00"), (365, 150, "0.00"),
         (407, 150, "1.2549"), (446, 150, "12.00"),
     ]
+    if extra_number is not None:
+        parts.append((174, 42, extra_number))
     if style:
         parts.append((234, 135, "Estilo"))
     if outgoing is not None:
@@ -95,6 +97,21 @@ def test_extracts_distinct_sections_and_preserves_printed_values():
         "inbound_units": "2.00", "inbound_total": "2.5098",
     }]
     assert first["issues"] == second["issues"] == []
+
+
+def test_reports_missing_and_ambiguous_numbers_without_guessing():
+    writer = PdfWriter()
+    _form(writer, "000001", extra_number="000001")
+    _form(writer, "")
+    _form(writer, "000003", extra_number="000004")
+    extraction = pdf.parse_pdf(_bytes(writer))
+
+    document, = extraction["documents"]
+    assert document["number"] == "000001" and document["pages"] == [1]
+    missing, ambiguous = extraction["issues"]
+    assert (missing["code"], missing["page"], missing["severity"]) == ("missing_output_number", 2, "error")
+    assert (ambiguous["code"], ambiguous["page"], ambiguous["severity"]) == ("ambiguous_output_number", 3, "error")
+    assert "000003" in ambiguous["message"] and "000004" in ambiguous["message"]
 
 
 def test_reports_image_only_and_unrecognized_pages():

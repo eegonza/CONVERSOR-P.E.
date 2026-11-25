@@ -84,7 +84,14 @@ def test_excel_matches_preview_and_preserves_literal_text_and_zero(document):
         ("00009", formula_like_text, "000123", 2.5, 25, 1, 1),
         ("00009", "Producto gravado", "000123", 0, None, 2, 1),
     ]
-    assert sheet.tables["DatosSalida"].autoFilter.ref == "A1:G3"
+    table = sheet.tables["DatosSalida"]
+    assert table.autoFilter.ref == "A1:G3"
+    assert table.tableStyleInfo.showColumnStripes is True
+    assert table.tableStyleInfo.showRowStripes is False
+    for data_row in sheet.iter_rows(min_row=2):
+        for cell in data_row:
+            expected_color = "FFE8E8E8" if cell.column % 2 == 0 else "FFFFFFFF"
+            assert cell.fill.patternType == "solid" and cell.fill.fgColor.rgb == expected_color
     assert [sheet[coord].data_type for coord in ("A2", "B2", "C2", "D3")] == ["s", "s", "s", "n"]
     assert sheet["D3"].number_format.startswith("#,##0.00")
 

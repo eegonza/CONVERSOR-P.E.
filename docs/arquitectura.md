@@ -17,7 +17,7 @@ La versión con servidor local usa FastAPI y Uvicorn para servir la interfaz, ge
 1. El operador selecciona un PDF. La aplicación valida el archivo y calcula su huella SHA-256 para detectar el mismo archivo en el historial de esa cuenta.
 2. El analizador local obtiene los números de salida, las filas de cada página, los encabezados, el pie y los problemas detectados. La conversión registra el resultado de extracción y las horas de carga y procesamiento por separado en Postgres.
 3. El operador corrige los datos, elige filas y columnas y solicita una vista previa. El servidor valida los valores y la selección, conserva la procedencia y calcula los resúmenes respaldados por los datos disponibles.
-4. El operador confirma el número de salida y deja constancia de las inconsistencias aceptadas. Supabase vincula la aprobación a la versión de la vista previa. En GitHub Pages, el navegador genera `SALIDA [NÚMERO DE SALIDA].xlsx` con esa selección.
+4. La aplicación confirma el número cuando el PDF identifica una sola salida inequívoca. El operador confirma el número cuando hay varias salidas, registra las advertencias aceptadas y aprueba la descarga. Supabase vincula la aprobación a la versión de la vista previa. En GitHub Pages, el navegador genera `SALIDA [NÚMERO DE SALIDA].xlsx` con esa selección.
 
 La aplicación mantiene la posición y los valores impresos de los renglones. El `01` separado antes del código se omite en la columna **Código**. Un valor vacío queda vacío y un cero impreso se conserva. El orden inicial coloca **Unidades** antes de **Costo**. Los renglones repetidos se distinguen por página y posición. El resumen de las filas elegidas y los totales impresos del PDF tienen procedencias distintas.
 

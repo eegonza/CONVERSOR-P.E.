@@ -124,7 +124,7 @@
           </ol>
 
           <section id="upload-section" class="card upload-card" aria-labelledby="file-instructions">
-            <form id="upload-form" method="post" enctype="multipart/form-data">
+            <div id="upload-controls">
               <div id="drop-zone" class="drop-zone">
                 <span class="upload-icon" aria-hidden="true"><span></span></span>
                 <div>
@@ -141,11 +141,10 @@
                   <strong id="file-name"></strong>
                   <span id="file-size" class="muted"></span>
                 </div>
-                <button id="upload-button" class="button primary" type="submit" disabled hidden>Analizar documento</button>
               </div>
               <progress id="upload-progress" aria-label="Progreso del documento" max="100" hidden></progress>
               <p id="upload-status" class="notice" role="status" aria-live="polite" hidden></p>
-            </form>
+            </div>
             <details id="source-card" class="source-card" hidden>
               <summary>Documento original</summary>
               <div class="source-content stack">

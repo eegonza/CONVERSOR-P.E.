@@ -101,7 +101,9 @@ function runWorker(action, payload, { signal, onStage } = {}) {
       reject(new HostedError(400, "Procesamiento cancelado."));
       return;
     }
-    const worker = new Worker(new URL("./runtime-worker.mjs", import.meta.url), { type: "module" });
+    const workerURL = new URL("./runtime-worker.mjs", import.meta.url);
+    workerURL.search = new URL(import.meta.url).search;
+    const worker = new Worker(workerURL, { type: "module" });
     function finish(error, value) {
       window.clearTimeout(timeout);
       signal?.removeEventListener("abort", cancel);

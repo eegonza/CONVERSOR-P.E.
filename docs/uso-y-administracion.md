@@ -3,11 +3,11 @@
 ## Conversión y exportación
 
 1. Inicia sesión con la cuenta que te dio el administrador.
-2. Selecciona un PDF en la pantalla principal o arrástralo al área de carga. Si el mismo archivo ya figura en tu historial, puedes retomar su conversión.
-3. Selecciona la salida que quieres revisar cuando el PDF contenga más de una. Comprueba el número con el encabezado del original. La previsualización del PDF depende del archivo seleccionado en el navegador. El historial conserva los datos extraídos.
+2. Selecciona o arrastra un PDF. El análisis comienza automáticamente y abre la vista previa. Si el mismo archivo ya figura en tu historial, puedes retomar su conversión.
+3. Si el PDF contiene una sola salida válida, su número aparece como **Número de salida confirmado**. Cuando contiene varias salidas, elige una y comprueba el número con el encabezado. Si falta el número o una página contiene varios candidatos, revisa **Documento original** y los hallazgos del PDF. La exportación requiere un número válido e inequívoco.
 4. Usa los filtros y compara los campos dudosos con la página y el renglón indicados. Corrige los valores cuando dispongas de respaldo. Conserva los ceros iniciales en los códigos. Deja vacío un campo cuyo valor desconozcas.
-5. Selecciona las columnas, ajusta su orden y excluye las filas que no deben aparecer en el Excel. Revisa la vista previa de exportación y compárala con los totales impresos del documento.
-6. Confirma el número de salida. Si la aplicación permite continuar con un aviso, registra el motivo. Usa **Validar y generar Excel** para descargar `SALIDA [NÚMERO DE SALIDA].xlsx`.
+5. Selecciona y ordena las columnas, elige las filas y pulsa **Calcular totales**. Usa **Motivo** para consultar la nota del documento cuando esté disponible.
+6. Revisa la vista previa y confirma el número si queda pendiente. Si la aplicación permite continuar con advertencias, explica por qué las aceptas. Pulsa **Aprobar y descargar Excel**. El archivo `SALIDA [NÚMERO DE SALIDA].xlsx` contiene una tabla con filtros y bandas grises por columna.
 
 Si cambias los datos o la selección después de revisar la vista previa, genera una vista nueva y comprueba los importes antes de descargar. Si el PDF no tiene texto seleccionable o no se reconoce el formato, revisa el diagnóstico y solicita una copia digital compatible.
 

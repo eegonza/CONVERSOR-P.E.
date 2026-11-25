@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, copyFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -34,17 +35,6 @@ execFileSync(process.env.PYTHON || "python3", [
 ], { stdio: "inherit" });
 
 const staticSource = new URL("./conversor/static/", root);
-const html = await readFile(new URL("./index.html", staticSource), "utf8");
-const policy = `default-src 'self'; base-uri 'none'; connect-src 'self' ${url.origin}; script-src 'self' 'wasm-unsafe-eval'; frame-src blob:; worker-src 'self'; img-src 'self' data: blob:; object-src 'none'; form-action 'none'`;
-const entry = html
-  .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n    <meta http-equiv="Content-Security-Policy" content="${policy}">\n    <meta name="referrer" content="no-referrer">`)
-  .replace('href="/static/styles.css"', 'href="./assets/styles.css"')
-  .replace('<script src="/static/app.js" defer></script>', '<script src="./assets/transport.js" type="module"></script>');
-if (entry.includes('src="/static/') || !entry.includes("./assets/transport.js")) {
-  throw new Error("No se pudo adaptar el documento inicial para GitHub Pages.");
-}
-await writeFile(new URL("./index.html", dist), entry);
-await writeFile(new URL("./.nojekyll", dist), "");
 await copyFile(new URL("./styles.css", staticSource), new URL("./assets/styles.css", dist));
 await copyFile(new URL("./runtime-worker.mjs", here), new URL("./assets/runtime-worker.mjs", dist));
 await build({
@@ -59,3 +49,20 @@ await build({
     CONVERSOR_PUBLISHABLE_KEY: JSON.stringify(publishable),
   },
 });
+
+const revision = createHash("sha256");
+for (const asset of ["assets/styles.css", "assets/transport.js", "assets/runtime-worker.mjs", "runtime/conversor.zip"]) {
+  revision.update(await readFile(new URL(asset, dist)));
+}
+const version = `?v=${revision.digest("hex").slice(0, 16)}`;
+const html = await readFile(new URL("./index.html", staticSource), "utf8");
+const policy = `default-src 'self'; base-uri 'none'; connect-src 'self' ${url.origin}; script-src 'self' 'wasm-unsafe-eval'; frame-src blob:; worker-src 'self'; img-src 'self' data: blob:; object-src 'none'; form-action 'none'`;
+const entry = html
+  .replace('<meta charset="utf-8">', `<meta charset="utf-8">\n    <meta http-equiv="Content-Security-Policy" content="${policy}">\n    <meta name="referrer" content="no-referrer">`)
+  .replace('href="/static/styles.css"', `href="./assets/styles.css${version}"`)
+  .replace('<script src="/static/app.js" defer></script>', `<script src="./assets/transport.js${version}" type="module"></script>`);
+if (entry.includes('src="/static/') || !entry.includes("./assets/transport.js")) {
+  throw new Error("No se pudo adaptar el documento inicial para GitHub Pages.");
+}
+await writeFile(new URL("./index.html", dist), entry);
+await writeFile(new URL("./.nojekyll", dist), "");

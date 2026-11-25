@@ -88,8 +88,9 @@ def _header(fragments):
     if not title or not company or not any(f.text.casefold().startswith("número:") for f in top):
         return None, False, None
 
-    numbers = [f.text for f in top if 75 < f.x < 240 and 34 < f.y < 47 and _NUMBER.fullmatch(f.text)]
-    number = numbers[0] if len(numbers) == 1 else None
+    numbers = list(dict.fromkeys(
+        f.text for f in top if 75 < f.x < 240 and 34 < f.y < 47 and _NUMBER.fullmatch(f.text)
+    ))
     header = {"date": None, "printed_date": None, "reference": None, "destination": None,
               "note": None, "company": company, "title": title}
     printed_page = None
@@ -111,7 +112,7 @@ def _header(fragments):
                 header["reference"] = f.text
             elif f.x > 405:
                 header["destination"] = f.text
-    return (number, header), "estilo" in table, printed_page
+    return (numbers, header), "estilo" in table, printed_page
 
 
 def _row_cells(anchor, fragments, has_style, page, line, issues):
@@ -301,10 +302,17 @@ def parse_pdf(data: bytes, *, max_pages: int = 100) -> dict:
         if not header_result:
             issues.append(_issue("unrecognized_page", "La página no coincide con una plantilla aprobada de Salidas de Producto.", page_number, severity="error"))
             continue
-        number, header = header_result
-        if number is None:
-            issues.append(_issue("missing_output_number", "No se encontró un único número de salida válido en la página.", page_number, severity="error"))
+        numbers, header = header_result
+        if not numbers:
+            issues.append(_issue("missing_output_number", "Falta un número de salida válido en la página.", page_number, severity="error"))
             continue
+        if len(numbers) > 1:
+            candidates = ", ".join(numbers[:6])
+            if len(numbers) > 6:
+                candidates += ", …"
+            issues.append(_issue("ambiguous_output_number", f"Se encontraron varios candidatos al número de salida ({candidates}).", page_number, severity="error"))
+            continue
+        number = numbers[0]
 
         page_issues = []
         end_y, totals, header["note"] = _footer(fragments, page_number, page_issues)

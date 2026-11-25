@@ -5,7 +5,7 @@ from io import BytesIO
 
 from openpyxl import Workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
@@ -54,6 +54,8 @@ _COMMA_DECIMAL = re.compile(r"[+-]?[0-9]{1,3}(?:\.[0-9]{3})+,[0-9]+\Z")
 _AMBIGUOUS_COMMA = re.compile(r"[+-]?[1-9][0-9]{0,2},[0-9]{3}\Z")
 _DECIMAL_FORMAT = "#,##0.00######"
 _TOTAL_FIELDS = ("subtotal", "tax", "net")
+_GRAY_COLUMN_FILL = PatternFill(fill_type="solid", fgColor="FFE8E8E8")
+_WHITE_COLUMN_FILL = PatternFill(fill_type="solid", fgColor="FFFFFFFF")
 
 
 class ReviewError(ValueError):
@@ -403,11 +405,13 @@ def write_excel(preview: dict) -> bytes:
         label = COLUMN_LABELS[field]
         sheet.cell(1, column_index, label)
         width = len(label)
+        fill = _GRAY_COLUMN_FILL if column_index % 2 == 0 else _WHITE_COLUMN_FILL
         for row_index, row in enumerate(rows, start=2):
             value = row[field]
+            cell = sheet.cell(row_index, column_index)
+            cell.fill = fill
             if value is None:
                 continue
-            cell = sheet.cell(row_index, column_index)
             if field in _DECIMAL_FIELDS:
                 cell.value = Decimal(value)
                 cell.number_format = _DECIMAL_FORMAT
@@ -421,7 +425,7 @@ def write_excel(preview: dict) -> bytes:
         sheet.column_dimensions[get_column_letter(column_index)].width = min(64, max(12, width + 4))
 
     table = Table(displayName="DatosSalida", ref=f"A1:{get_column_letter(len(columns))}{len(rows) + 1}")
-    table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+    table.tableStyleInfo = TableStyleInfo(name="TableStyleLight1", showRowStripes=False, showColumnStripes=True)
     sheet.add_table(table)
 
     with BytesIO() as output:

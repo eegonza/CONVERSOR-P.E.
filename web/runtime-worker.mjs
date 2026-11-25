@@ -1,6 +1,8 @@
 import { loadPyodide } from "../runtime/pyodide.mjs";
 
 const runtime = new URL("../runtime/", import.meta.url);
+const modulesURL = new URL("conversor.zip", runtime);
+modulesURL.search = new URL(import.meta.url).search;
 
 self.addEventListener("message", async ({ data }) => {
   if (!data || !["extract", "xlsx"].includes(data.action)) return;
@@ -9,7 +11,7 @@ self.addEventListener("message", async ({ data }) => {
     self.postMessage({ stage: "loading" });
     const [python, modules] = await Promise.all([
       loadPyodide({ indexURL: runtime.href }),
-      fetch(new URL("conversor.zip", runtime)).then((response) => {
+      fetch(modulesURL).then((response) => {
         if (!response.ok) throw new Error("No se pudieron cargar las herramientas del conversor.");
         return response.arrayBuffer();
       }),

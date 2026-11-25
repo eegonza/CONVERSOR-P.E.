@@ -17,7 +17,7 @@ const initialLabels = {
   outbound_total: "Total salidas", inbound_units: "Unidades entradas", inbound_total: "Total entradas",
 };
 const state = {
-  session: null, activeView: null, file: null, upload: null, uploadBusy: false,
+  session: null, activeView: null, upload: null, uploadBusy: false,
   source: null, record: null, doc: null, columns: [], edits: Object.create(null), exclude: new Set(),
   search: "", page: "", editing: null, preview: null, previewRevision: 0, review: null,
   sort: null, listRevisions: Object.create(null), listOffsets: Object.create(null), historySelection: 0,
@@ -221,10 +221,10 @@ function endSession(message = "") {
   state.previewRevision += 1;
   state.review = null;
   byId("review-content").inert = false;
-  byId("upload-form").inert = false;
+  byId("upload-controls").inert = false;
   clearSource();
-  byId("upload-form").reset();
-  setFile(null);
+  byId("file-input").value = "";
+  updateFileDetails();
   updateWorkflow();
   setUploadProgress(false);
   notice(byId("upload-status"));
@@ -272,21 +272,12 @@ function showSource(file, id) {
   byId("source-card").hidden = false;
 }
 
-function setFile(file) {
-  if (file && (!/\.pdf$/i.test(file.name) || file.size === 0)) {
-    setFile(null);
-    byId("file-input").value = "";
-    notice(byId("upload-status"), "Seleccione un archivo PDF con contenido.", "error");
-    return;
-  }
-  state.file = file;
+function updateFileDetails(file = null) {
   const { record } = state;
   byId("file-details").hidden = !file && !record;
-  byId("upload-button").hidden = !file;
-  byId("upload-button").disabled = state.uploadBusy || !file;
   byId("file-name").textContent = file?.name ?? record?.filename ?? "";
   let details = "";
-  if (file) details = `${new Intl.NumberFormat("es-PA").format(file.size)} bytes · Listo para analizar`;
+  if (file) details = `${new Intl.NumberFormat("es-PA").format(file.size)} bytes`;
   else if (record) {
     const { documents, page_count: pages } = record.extraction;
     const rows = documents.reduce((total, item) => total + item.rows.length, 0);
@@ -294,7 +285,6 @@ function setFile(file) {
   }
   byId("file-size").textContent = details;
   byId("pick-file").textContent = record ? "Seleccionar otro PDF" : "Seleccionar PDF";
-  notice(byId("upload-status"));
 }
 
 function updateWorkflow() {
@@ -328,12 +318,6 @@ function uploadFile(file) {
       signal: controller.signal,
       onStage: (stage) => {
         if (controller.signal.aborted) return;
-        const messages = {
-          loading: "Preparando el lector de PDF…",
-          reading: "Leyendo el PDF en este navegador…",
-          saving: "Guardando los datos extraídos en Supabase…",
-        };
-        if (messages[stage]) notice(byId("upload-status"), messages[stage]);
         setUploadProgress(true, stage === "saving" ? 90 : undefined);
       },
     });
@@ -349,10 +333,7 @@ function uploadFile(file) {
     req.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) setUploadProgress(true, event.loaded / event.total * 100);
     });
-    req.upload.addEventListener("load", () => {
-      notice(byId("upload-status"), "Leyendo el PDF…");
-      setUploadProgress(true);
-    });
+    req.upload.addEventListener("load", () => setUploadProgress(true));
     req.addEventListener("load", () => {
       if (req.status >= 200 && req.status < 300 && req.response) resolve(req.response);
       else reject(new RequestError(req.status, req.response));
@@ -365,6 +346,10 @@ function uploadFile(file) {
 
 function columnsWithCodeFirst(columns) {
   return columns.includes("code") ? ["code", ...columns.filter((key) => key !== "code")] : [...columns];
+}
+
+function isOutputNumber(value) {
+  return typeof value === "string" && /^[0-9]{1,40}$/.test(value);
 }
 
 function selectDocument(doc) {
@@ -386,8 +371,8 @@ function loadRecord(record, file = null) {
   if (file) showSource(file, record.id);
   else if (state.source?.id !== record.id) clearSource();
   state.record = record;
-  byId("file-input").value = "";
-  setFile(null);
+  updateFileDetails();
+  notice(byId("upload-status"));
   const documents = record.extraction.documents;
   selectDocument(documents.length === 1 ? documents[0] : null);
   byId("review-section").hidden = false;
@@ -443,7 +428,7 @@ function invalidatePreview() {
 
 function updatePreviewControl() {
   const control = state.review.previewButton;
-  control.disabled = !state.doc?.number || !state.columns.length ||
+  control.disabled = !isOutputNumber(state.doc?.number) || !state.columns.length ||
     state.doc.rows.length === state.exclude.size || state.editing !== null || state.review.previewPending;
   control.textContent = state.preview ? "Recalcular totales" : "Calcular totales";
   control.classList.toggle("primary", !state.preview);
@@ -565,47 +550,68 @@ function editRow(row) {
   form.querySelector("input").focus();
 }
 
-function renderColumnOptions(focusKey) {
-  const options = state.review.columnOptions;
-  const selected = state.columns;
+function renderColumnOptions() {
+  const { columnOptions } = state.review;
   const all = Object.keys(state.session.columns);
-  const firstMovableIndex = selected[0] === "code" ? 1 : 0;
-  const displayed = columnsWithCodeFirst([...selected, ...all.filter((column) => !selected.includes(column))]);
-  state.review.columnCount.textContent = `${selected.length} de ${all.length} seleccionadas`;
-  options.replaceChildren();
-  for (const key of displayed) {
+  const displayed = columnsWithCodeFirst([...state.columns, ...all.filter((key) => !state.columns.includes(key))]);
+  state.review.columnChoices = displayed.map((key) => {
     const option = element("div", null, "column-option");
-    const index = selected.indexOf(key);
     const control = input("checkbox", key);
-    control.checked = index !== -1;
-    option.classList.toggle("is-selected", control.checked);
+    control.checked = state.columns.includes(key);
     control.addEventListener("change", () => {
-      if (control.checked) selected.splice(key === "code" ? 0 : selected.length, 0, key);
-      else selected.splice(index, 1);
+      updateColumnSelection();
       invalidatePreview();
-      renderColumnOptions(key);
     });
     const label = element("label", null, "checkbox-label");
     label.append(control, element("span", labelFor(key)));
     option.append(label);
-    if (index >= firstMovableIndex && selected.length - firstMovableIndex > 1) {
+    const choice = { key, option, control, moves: [] };
+    if (key !== "code") {
       const reorder = element("div", null, "reorder-controls");
       for (const [delta, symbol, action] of [[-1, "↑", "Subir"], [1, "↓", "Bajar"]]) {
-        const adjacent = index + delta;
-        const move = button(symbol, () => {
-          [selected[index], selected[adjacent]] = [selected[adjacent], selected[index]];
-          invalidatePreview();
-          renderColumnOptions(key);
-        }, "reorder-button");
-        move.disabled = adjacent < firstMovableIndex || adjacent >= selected.length;
+        const move = button(symbol, () => moveColumn(choice, delta), "reorder-button");
         move.setAttribute("aria-label", `${action} ${labelFor(key)}`);
         reorder.append(move);
+        choice.moves.push({ move, delta });
       }
       option.append(reorder);
     }
-    options.append(option);
-    if (focusKey === key) control.focus();
+    return choice;
+  });
+  columnOptions.replaceChildren(...state.review.columnChoices.map(({ option }) => option));
+  updateColumnSelection();
+}
+
+function updateColumnSelection() {
+  const { columnChoices, columnCount } = state.review;
+  const selected = columnChoices.filter(({ control }) => control.checked);
+  state.columns = selected.map(({ key }) => key);
+  const firstMovableIndex = state.columns[0] === "code" ? 1 : 0;
+  for (const choice of columnChoices) {
+    choice.option.classList.toggle("is-selected", choice.control.checked);
+    const index = selected.indexOf(choice);
+    for (const { move, delta } of choice.moves) {
+      const adjacent = index + delta;
+      move.disabled = index < firstMovableIndex || adjacent < firstMovableIndex || adjacent >= selected.length;
+    }
   }
+  columnCount.textContent = `${selected.length} de ${columnChoices.length} seleccionadas`;
+}
+
+function moveColumn(choice, delta) {
+  const { columnOptions, columnChoices } = state.review;
+  const selected = columnChoices.filter(({ control }) => control.checked);
+  const adjacent = selected[selected.indexOf(choice) + delta];
+  if (!choice.control.checked || !adjacent || adjacent.key === "code") return;
+  const from = columnChoices.indexOf(choice);
+  const to = columnChoices.indexOf(adjacent);
+  const scroll = columnOptions.scrollTop;
+  [columnChoices[from], columnChoices[to]] = [columnChoices[to], columnChoices[from]];
+  columnOptions.replaceChildren(...columnChoices.map(({ option }) => option));
+  updateColumnSelection();
+  invalidatePreview();
+  choice.control.focus({ preventScroll: true });
+  columnOptions.scrollTop = scroll;
 }
 
 function renderReview() {
@@ -620,35 +626,56 @@ function renderReview() {
     ]);
     picker.value = doc ? String(extraction.documents.indexOf(doc)) : "";
     picker.addEventListener("change", () => selectDocument(picker.value === "" ? null : extraction.documents[Number(picker.value)]));
-    const panel = element("div", null, "card document-picker");
-    panel.append(field("Salida del PDF", picker));
+    const panel = element("div", null, "card stack document-picker");
+    panel.append(element("p", "El PDF contiene varias salidas. Revise el número y elija la que desea exportar.", "notice warning"),
+      field("Salida del PDF", picker));
     area.append(panel);
   }
   const general = issueDetails(extraction.issues, "Hallazgos del PDF");
   if (general) area.append(general);
   if (!doc) {
     state.review = null;
-    if (!extraction.documents.length) area.append(element("p", "No se identificó una salida en este PDF.", "notice error"));
+    if (!extraction.documents.length) area.append(element("p", "Revise el número en el PDF original. La exportación requiere un número de salida válido e inequívoco.", "notice error"));
     return;
   }
+  const detectedNumber = isOutputNumber(doc.number) ? doc.number : null;
+  const numberIssue = extraction.issues.some(({ code }) => code === "missing_output_number" || code === "ambiguous_output_number");
+  const confirmedNumber = extraction.documents.length === 1 && !numberIssue ? detectedNumber : null;
   const previewPanel = element("section", null, "card stack preview-panel");
   const previewHeader = element("header", null, "section-header preview-header");
   const title = element("div");
-  title.append(element("h2", "Vista previa"), element("p", `Salida ${doc.number || "sin identificar"}`, "muted"));
+  title.append(element("h2", "Vista previa"));
+  if (detectedNumber) {
+    const number = element("p", confirmedNumber ? "Número de salida confirmado " : "Número de salida por confirmar ", "preview-number muted");
+    number.append(element("strong", detectedNumber));
+    title.append(number);
+  }
   const previewCount = element("span", null, "badge row-badge");
   previewCount.setAttribute("aria-live", "polite");
-  previewHeader.append(title, previewCount);
+  const headerActions = element("div", null, "section-actions");
+  headerActions.append(previewCount);
+  const note = doc.header?.note;
+  if (note) {
+    const dialog = element("dialog", null, "reason-dialog");
+    dialog.setAttribute("aria-label", "Motivo");
+    const close = button("Cerrar", () => dialog.close());
+    close.autofocus = true;
+    dialog.append(element("h2", "Motivo"), element("p", note, "reason-text"), close);
+    headerActions.prepend(button("Motivo", () => dialog.showModal(), "button secondary small"));
+    previewPanel.append(dialog);
+  }
+  previewHeader.append(title, headerActions);
   const previewTable = element("div", null, "excel-preview stack");
   previewPanel.append(previewHeader, previewTable);
 
   const docProblems = issueDetails(doc.issues, "Hallazgos de la salida");
   if (docProblems) previewPanel.append(docProblems);
-  if (!doc.number) previewPanel.append(element("p", "Se necesita un número de salida identificado para generar el Excel.", "notice error"));
+  if (!detectedNumber) previewPanel.append(element("p", "Se necesita un número de salida identificado para generar el Excel.", "notice error"));
 
   const headerValues = [
     ["Empresa", doc.header?.company], ["Fecha de salida", doc.header?.date],
     ["Fecha superior", doc.header?.printed_date], ["Referencia", doc.header?.reference],
-    ["Destino", doc.header?.destination], ["Nota del PDF", doc.header?.note],
+    ["Destino", doc.header?.destination],
   ].filter(([, value]) => value != null && value !== "");
   if (headerValues.length) {
     const documentDetails = element("details", null, "review-fold");
@@ -713,7 +740,7 @@ function renderReview() {
   const columnHeader = element("header");
   const columnCount = element("p", null, "muted");
   columnCount.setAttribute("aria-live", "polite");
-  columnHeader.append(element("h2", "Columnas del Excel"), columnCount);
+  columnHeader.append(element("h2", "Columnas de Excel"), columnCount);
   const columnOptions = element("div", null, "column-options");
   columnCard.append(columnHeader, columnOptions);
   const previewButton = button("Calcular totales", createPreview, "button primary");
@@ -726,7 +753,8 @@ function renderReview() {
   previewPanel.append(rowsCard, calculation, previewStatus, validation);
   state.review = {
     sourceRows: grid.body, count, editor, columnOptions, columnCount,
-    previewTable, previewCount, previewButton, previewStatus, validation, previewPending: false, exported: false,
+    previewTable, previewCount, previewButton, previewStatus, validation, confirmedNumber,
+    previewPending: false, exported: false,
   };
   const layout = element("div", null, "review-layout");
   layout.append(columnCard, previewPanel);
@@ -847,13 +875,17 @@ function renderPreview(result) {
 function exportForm(result, hasWarnings) {
   const form = element("form", null, "stack export-form");
   const filename = `SALIDA ${result.preview.number}.xlsx`;
-  const number = input("text", "confirmed_number");
-  number.required = true;
-  number.inputMode = "numeric";
-  number.autocomplete = "off";
+  const confirmedNumber = state.review.confirmedNumber;
+  const number = confirmedNumber === null ? input("text", "confirmed_number") : null;
   const fields = element("div", null, "field-grid export-fields");
-  fields.append(field(`Escriba ${result.preview.number} para confirmar la salida`, number),
-    field("Archivo Excel", element("output", filename, "export-filename")));
+  if (number) {
+    number.required = true;
+    number.maxLength = 40;
+    number.inputMode = "numeric";
+    number.autocomplete = "off";
+    fields.append(field(`Escriba ${result.preview.number} para confirmar la salida`, number));
+  }
+  fields.append(field("Archivo Excel", element("output", filename, "export-filename")));
   form.append(fields);
   const reason = element("textarea");
   reason.name = "accepted_reason";
@@ -863,7 +895,7 @@ function exportForm(result, hasWarnings) {
     form.append(field("Motivo para aceptar las advertencias", reason));
   }
   const actions = element("div", null, "form-actions");
-  const submit = button("Descargar Excel", null, "button primary");
+  const submit = button("Aprobar y descargar Excel", null, "button primary");
   submit.type = "submit";
   const message = element("p", null, "notice");
   message.hidden = true;
@@ -876,9 +908,10 @@ function exportForm(result, hasWarnings) {
   form.append(actions, message);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (number.value.trim() !== result.preview.number) {
+    const confirmation = number ? number.value.trim() : confirmedNumber;
+    if (!isOutputNumber(confirmation) || confirmation !== result.preview.number) {
       notice(message, "El número de salida debe coincidir exactamente con la vista previa.", "error");
-      number.focus();
+      number?.focus();
       return;
     }
     if (hasWarnings && !reason.value.trim()) {
@@ -893,15 +926,15 @@ function exportForm(result, hasWarnings) {
     const session = state.session;
     const record = state.record;
     const reviewContent = byId("review-content");
-    const uploadForm = byId("upload-form");
+    const uploadControls = byId("upload-controls");
     reviewContent.inert = true;
-    uploadForm.inert = true;
+    uploadControls.inert = true;
     try {
       notice(message, "Generando el Excel…");
       const excel = await request(`/api/conversions/${encodeURIComponent(record.id)}/export`, {
         method: "POST", esArchivo: true,
         body: {
-          ...documentPayload(), preview_hash: result.preview_hash, confirmed_number: number.value.trim(),
+          ...documentPayload(), preview_hash: result.preview_hash, confirmed_number: confirmation,
           accepted_reason: reason.value.trim() || null,
         },
       });
@@ -928,7 +961,7 @@ function exportForm(result, hasWarnings) {
     } finally {
       if (state.session === session) {
         reviewContent.inert = false;
-        uploadForm.inert = false;
+        uploadControls.inert = false;
       }
     }
   });
@@ -959,6 +992,10 @@ function renderHistory(records) {
   const listing = table(["Archivo PDF", "Carga", "Procesamiento", ...(admin ? ["Usuario"] : []), "Acción"], "Historial de documentos");
   for (const record of records) {
     const open = button("Abrir revisión", async () => {
+      if (state.uploadBusy) {
+        notice(byId("global-status"), "El PDF todavía se está analizando.", "warning");
+        return;
+      }
       const session = state.session;
       const selection = ++state.historySelection;
       open.disabled = true;
@@ -1199,7 +1236,7 @@ byId("logout-button").addEventListener("click", async () => {
 });
 
 byId("pick-file").addEventListener("click", () => byId("file-input").click());
-byId("file-input").addEventListener("change", (event) => setFile(event.currentTarget.files[0] ?? null));
+byId("file-input").addEventListener("change", (event) => analyzeFile(event.currentTarget.files[0]));
 const dropZone = byId("drop-zone");
 dropZone.addEventListener("dragover", (event) => {
   event.preventDefault();
@@ -1213,41 +1250,58 @@ dropZone.addEventListener("drop", (event) => {
   dropZone.classList.remove("is-dragging");
   if (state.uploadBusy) return;
   const { files } = event.dataTransfer;
-  if (files.length === 1) {
-    byId("file-input").value = "";
-    setFile(files[0]);
-  } else if (files.length > 1) notice(byId("upload-status"), "Seleccione un documento PDF por vez.", "warning");
+  if (files.length === 1) analyzeFile(files[0]);
+  else if (files.length > 1) notice(byId("upload-status"), "Seleccione un documento PDF por vez.", "warning");
 });
-byId("upload-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (state.uploadBusy || !state.file || !state.session) return;
-  const { session, file } = state;
+
+async function analyzeFile(file) {
+  if (!file || !state.session || state.uploadBusy || byId("upload-controls").inert) return;
+  const fileInput = byId("file-input");
+  if (!/\.pdf$/i.test(file.name) || file.size === 0) {
+    fileInput.value = "";
+    notice(byId("upload-status"), "Seleccione un archivo PDF con contenido.", "error");
+    return;
+  }
+  const { session } = state;
   state.uploadBusy = true;
-  for (const id of ["file-input", "pick-file", "upload-button"]) byId(id).disabled = true;
-  notice(byId("upload-status"), hosted ? "Leyendo el PDF en este navegador…" : "Cargando el PDF…");
-  setUploadProgress(true, 0);
+  state.historySelection += 1;
+  fileInput.disabled = true;
+  byId("pick-file").disabled = true;
+  byId("review-content").inert = true;
+  updateFileDetails(file);
+  notice(byId("upload-status"), "Analizando PDF…");
+  setUploadProgress(true);
   try {
     const record = await uploadFile(file);
     if (state.session !== session) return;
     loadRecord(record, file);
     const duplicate = record.duplicate ?? record.duplicated ?? false;
-    notice(byId("upload-status"), duplicate ? "Este PDF ya se había procesado. Se abrió su revisión." : "Lectura del PDF completada.",
-      duplicate ? "warning" : "success");
+    if (!record.extraction.documents.length) {
+      notice(byId("upload-status"), "No se pudo identificar una salida válida. Revise el documento original y los hallazgos del PDF.", "error");
+    } else {
+      notice(byId("upload-status"), duplicate ? "Este PDF ya se había procesado. Se abrió su revisión." : "Lectura del PDF completada.",
+        duplicate ? "warning" : "success");
+      if (state.activeView === "dashboard") byId("review-section").scrollIntoView({ block: "start" });
+    }
   } catch (error) {
     if (state.session !== session) return;
     if (error.status === 401) endSession("La sesión ha vencido. Inicie sesión nuevamente.");
-    else notice(byId("upload-status"), error.message, "error");
+    else {
+      updateFileDetails();
+      notice(byId("upload-status"), error.message, "error");
+    }
   } finally {
     if (state.session === session) {
       state.upload = null;
       state.uploadBusy = false;
-      byId("file-input").disabled = false;
+      fileInput.disabled = false;
+      fileInput.value = "";
       byId("pick-file").disabled = false;
-      byId("upload-button").disabled = !state.file;
+      byId("review-content").inert = false;
       setUploadProgress(false);
     }
   }
-});
+}
 
 async function initialize() {
   if (recoveryToken) {
