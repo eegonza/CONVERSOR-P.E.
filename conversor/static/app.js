@@ -363,11 +363,15 @@ function uploadFile(file) {
   });
 }
 
+function columnsWithCodeFirst(columns) {
+  return columns.includes("code") ? ["code", ...columns.filter((key) => key !== "code")] : [...columns];
+}
+
 function selectDocument(doc) {
   state.doc = doc;
   state.edits = Object.create(null);
   state.exclude = new Set();
-  state.columns = [...state.session.default_columns];
+  state.columns = columnsWithCodeFirst(state.session.default_columns);
   state.search = "";
   state.page = "";
   state.sort = null;
@@ -565,16 +569,18 @@ function renderColumnOptions(focusKey) {
   const options = state.review.columnOptions;
   const selected = state.columns;
   const all = Object.keys(state.session.columns);
+  const firstMovableIndex = selected[0] === "code" ? 1 : 0;
+  const displayed = columnsWithCodeFirst([...selected, ...all.filter((column) => !selected.includes(column))]);
   state.review.columnCount.textContent = `${selected.length} de ${all.length} seleccionadas`;
   options.replaceChildren();
-  for (const key of [...selected, ...all.filter((column) => !selected.includes(column))]) {
+  for (const key of displayed) {
     const option = element("div", null, "column-option");
     const index = selected.indexOf(key);
     const control = input("checkbox", key);
     control.checked = index !== -1;
     option.classList.toggle("is-selected", control.checked);
     control.addEventListener("change", () => {
-      if (control.checked) selected.push(key);
+      if (control.checked) selected.splice(key === "code" ? 0 : selected.length, 0, key);
       else selected.splice(index, 1);
       invalidatePreview();
       renderColumnOptions(key);
@@ -582,7 +588,7 @@ function renderColumnOptions(focusKey) {
     const label = element("label", null, "checkbox-label");
     label.append(control, element("span", labelFor(key)));
     option.append(label);
-    if (index !== -1 && selected.length > 1) {
+    if (index >= firstMovableIndex && selected.length - firstMovableIndex > 1) {
       const reorder = element("div", null, "reorder-controls");
       for (const [delta, symbol, action] of [[-1, "↑", "Subir"], [1, "↓", "Bajar"]]) {
         const adjacent = index + delta;
@@ -591,7 +597,7 @@ function renderColumnOptions(focusKey) {
           invalidatePreview();
           renderColumnOptions(key);
         }, "reorder-button");
-        move.disabled = adjacent < 0 || adjacent >= selected.length;
+        move.disabled = adjacent < firstMovableIndex || adjacent >= selected.length;
         move.setAttribute("aria-label", `${action} ${labelFor(key)}`);
         reorder.append(move);
       }
